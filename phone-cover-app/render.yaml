@@ -1,8 +1,0 @@
-services:
-  - type: web
-    name: phone-cover-app
-    env: node
-    plan: free
-    buildCommand: npm install
-    startCommand: node server.js
-    staticPublicPath: ./

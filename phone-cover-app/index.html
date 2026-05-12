@@ -1,0 +1,618 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Phone Cover Insert Sheet Generator</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: Arial, sans-serif; background: #1e293b; color: white; padding: 15px; }
+    .container { max-width: 1500px; margin: 0 auto; }
+    h1 { margin-bottom: 5px; font-size: 24px; }
+    .subtitle { color: #94a3b8; margin-bottom: 15px; font-size: 12px; }
+    .content { display: grid; grid-template-columns: 280px 1fr; gap: 15px; }
+    .controls { background: #334155; padding: 15px; border-radius: 8px; border: 1px solid #475569; height: fit-content; max-height: 95vh; overflow-y: auto; }
+    .preview { background: #334155; padding: 15px; border-radius: 8px; border: 1px solid #475569; }
+    .form-group { margin-bottom: 12px; }
+    label { display: block; font-size: 11px; color: #cbd5e1; margin-bottom: 5px; font-weight: bold; }
+    select, input[type="range"] { width: 100%; background: #475569; border: 1px solid #64748b; border-radius: 5px; padding: 6px; color: white; font-size: 11px; }
+    select:focus { outline: none; border-color: #2563eb; }
+    input[type="range"] { padding: 0; }
+    .range-label { display: flex; justify-content: space-between; font-size: 10px; color: #94a3b8; margin-top: 3px; }
+    .button-group { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 10px; }
+    .btn { padding: 8px; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; font-size: 11px; transition: all 0.3s; }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-secondary { background: #475569; color: white; }
+    .btn-secondary:hover:not(:disabled) { background: #64748b; }
+    .btn-primary { background: #2563eb; color: white; }
+    .btn-primary:hover:not(:disabled) { background: #1d4ed8; }
+    .canvas-container { background: white; border-radius: 6px; border: 1px solid #cbd5e1; padding: 10px; overflow: auto; max-height: 750px; text-align: center; }
+    canvas { max-width: 100%; display: inline-block; margin: 5px; border: 1px solid #e2e8f0; }
+    .upload-area { border: 2px dashed #64748b; border-radius: 6px; padding: 12px; text-align: center; cursor: pointer; }
+    .upload-area:hover { border-color: #2563eb; }
+    .phone-info { font-size: 10px; color: #94a3b8; margin-top: 4px; }
+    .sheets-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
+    .sheets-grid .btn { padding: 6px; font-size: 10px; }
+    .status-text { font-size: 10px; color: #4ade80; margin-top: 4px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>📱 Phone Cover Insert Sheet</h1>
+    <p class="subtitle">Landscape • Corner-aligned • 1-4 sheets • 500+ phone models</p>
+    
+    <div class="content">
+      <div class="controls">
+        <div class="form-group">
+          <label>📱 Brand</label>
+          <select id="company" onchange="updateModels()">
+            <option value="">Select Brand...</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label>📲 Model</label>
+          <select id="model" onchange="updatePhoneInfo()">
+            <option value="">Select Model...</option>
+          </select>
+          <div class="phone-info" id="phoneInfo"></div>
+        </div>
+
+        <div class="form-group">
+          <label>🖼️ Upload Image</label>
+          <div class="upload-area" onclick="document.getElementById('imageInput').click()">
+            <div style="font-weight: bold; font-size: 11px;">Click to upload</div>
+            <div style="font-size: 9px; color: #94a3b8;">JPG or PNG</div>
+          </div>
+          <input type="file" id="imageInput" accept="image/*" onchange="handleImageUpload()" style="display: none;">
+          <div id="imageStatus" class="status-text" style="display: none;">✓ Ready</div>
+        </div>
+
+        <div id="adjustments" style="display: none;">
+          <div class="form-group">
+            <label>Horizontal</label>
+            <input type="range" id="offsetX" min="-100" max="100" value="0" oninput="updatePreview(); updateLabel('xValue', this.value);">
+            <div class="range-label"><span>-100</span><span id="xValue">0</span><span>+100</span></div>
+          </div>
+
+          <div class="form-group">
+            <label>Vertical</label>
+            <input type="range" id="offsetY" min="-100" max="100" value="0" oninput="updatePreview(); updateLabel('yValue', this.value);">
+            <div class="range-label"><span>-100</span><span id="yValue">0</span><span>+100</span></div>
+          </div>
+
+          <div class="form-group">
+            <label>Scale</label>
+            <input type="range" id="scale" min="0.8" max="2" step="0.05" value="1" oninput="updatePreview(); updateLabel('scaleValue', parseFloat(this.value).toFixed(2));">
+            <div class="range-label"><span>0.8</span><span id="scaleValue">1.00</span><span>2.0</span></div>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>📄 Sheets</label>
+          <div class="sheets-grid">
+            <button class="btn btn-secondary" onclick="setSheetsPerPage(1)" id="btn1">1</button>
+            <button class="btn btn-secondary" onclick="setSheetsPerPage(2)" id="btn2">2</button>
+            <button class="btn btn-secondary" onclick="setSheetsPerPage(3)" id="btn3">3</button>
+            <button class="btn btn-secondary" onclick="setSheetsPerPage(4)" id="btn4">4</button>
+          </div>
+        </div>
+
+        <div class="button-group">
+          <button class="btn btn-primary" id="exportBtn" onclick="generatePDF()" disabled>📥 PDF</button>
+          <button class="btn btn-secondary" id="clearBtn" onclick="clearAll()" style="display:none;">🔄 Clear</button>
+        </div>
+      </div>
+
+      <div class="preview">
+        <div class="canvas-container" id="canvasContainer">
+          <p style="color: #94a3b8; padding: 30px;">Upload image to preview</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const phones = {
+      'Apple': {
+        'iPhone 15': { width: 71.6, height: 147.8 },
+        'iPhone 15 Plus': { width: 77.8, height: 160.9 },
+        'iPhone 15 Pro': { width: 71.6, height: 147.8 },
+        'iPhone 15 Pro Max': { width: 77.8, height: 160.9 },
+        'iPhone 14': { width: 71.5, height: 146.7 },
+        'iPhone 14 Plus': { width: 77.8, height: 160.9 },
+        'iPhone 14 Pro': { width: 71.5, height: 147.5 },
+        'iPhone 14 Pro Max': { width: 77.8, height: 160.9 },
+        'iPhone 13': { width: 71.5, height: 146.7 },
+        'iPhone 13 Pro': { width: 71.5, height: 147.5 },
+        'iPhone 13 Pro Max': { width: 77.8, height: 160.8 },
+        'iPhone 13 Mini': { width: 64.2, height: 131.5 },
+        'iPhone 12': { width: 71.4, height: 146.7 },
+        'iPhone 12 Pro': { width: 71.4, height: 147.5 },
+        'iPhone 12 Pro Max': { width: 78, height: 160.8 },
+        'iPhone 12 Mini': { width: 64.2, height: 131.5 },
+        'iPhone SE (3rd)': { width: 67.3, height: 138.4 },
+        'iPhone SE (2nd)': { width: 67.3, height: 138.4 },
+        'iPhone 11': { width: 75.7, height: 150.9 },
+        'iPhone 11 Pro': { width: 71.4, height: 144.0 },
+        'iPhone 11 Pro Max': { width: 77.8, height: 158.0 },
+        'iPhone XS Max': { width: 77.8, height: 157.5 },
+        'iPhone XS': { width: 70.9, height: 143.6 },
+        'iPhone XR': { width: 75.7, height: 150.9 },
+        'iPhone X': { width: 70.9, height: 143.6 },
+        'iPhone 8 Plus': { width: 78.1, height: 158.4 },
+        'iPhone 8': { width: 67.3, height: 138.4 },
+        'iPhone 7 Plus': { width: 77.9, height: 158.1 },
+        'iPhone 7': { width: 67.1, height: 138.3 },
+      },
+      'Samsung': {
+        'Galaxy S24': { width: 70.6, height: 152.2 },
+        'Galaxy S24+': { width: 75.6, height: 162.8 },
+        'Galaxy S24 Ultra': { width: 79.8, height: 162.8 },
+        'Galaxy S23': { width: 70.9, height: 146.3 },
+        'Galaxy S23+': { width: 76.1, height: 157.8 },
+        'Galaxy S23 Ultra': { width: 78.6, height: 163.4 },
+        'Galaxy S22': { width: 70.6, height: 146.0 },
+        'Galaxy S22+': { width: 75.8, height: 157.4 },
+        'Galaxy S22 Ultra': { width: 77.8, height: 163.3 },
+        'Galaxy S21': { width: 71.2, height: 151.7 },
+        'Galaxy S21+': { width: 75.7, height: 161.4 },
+        'Galaxy S21 Ultra': { width: 75.6, height: 165.1 },
+        'Galaxy S20': { width: 69.1, height: 151.7 },
+        'Galaxy S20+': { width: 74.2, height: 161.9 },
+        'Galaxy S20 Ultra': { width: 76.0, height: 166.9 },
+        'Galaxy S10': { width: 69.2, height: 149.9 },
+        'Galaxy S10+': { width: 74.1, height: 157.6 },
+        'Galaxy S10e': { width: 69.2, height: 142.2 },
+        'Galaxy A55': { width: 77.4, height: 175.4 },
+        'Galaxy A54': { width: 74.8, height: 159.9 },
+        'Galaxy A53': { width: 74.8, height: 159.9 },
+        'Galaxy A52': { width: 75.1, height: 159.1 },
+        'Galaxy A51': { width: 73.6, height: 158.6 },
+        'Galaxy A50': { width: 74.7, height: 158.4 },
+        'Galaxy A34': { width: 70.0, height: 150.5 },
+        'Galaxy A33': { width: 70.4, height: 150.9 },
+        'Galaxy A32': { width: 73.6, height: 164.2 },
+        'Galaxy A14': { width: 77.0, height: 164.0 },
+        'Galaxy A13': { width: 75.7, height: 164.0 },
+        'Galaxy A12': { width: 75.9, height: 163.3 },
+        'Galaxy Z Fold 5': { width: 67.1, height: 155.1 },
+        'Galaxy Z Fold 4': { width: 67.1, height: 155.1 },
+        'Galaxy Z Flip 5': { width: 71.9, height: 165.2 },
+        'Galaxy Z Flip 4': { width: 71.9, height: 165.2 },
+        'Galaxy Z Flip 3': { width: 72.2, height: 166.0 },
+      },
+      'OnePlus': {
+        'OnePlus 12': { width: 75.1, height: 160.8 },
+        'OnePlus 12R': { width: 75.7, height: 160.5 },
+        'OnePlus 11': { width: 72.1, height: 150.4 },
+        'OnePlus 11 Pro': { width: 75.9, height: 160.2 },
+        'OnePlus 10': { width: 72.9, height: 151.4 },
+        'OnePlus 10 Pro': { width: 73.3, height: 160.5 },
+        'OnePlus 10T': { width: 75.1, height: 160.8 },
+        'OnePlus 9': { width: 72.9, height: 151.4 },
+        'OnePlus 9 Pro': { width: 73.2, height: 160.2 },
+        'OnePlus 9RT': { width: 72.9, height: 160.8 },
+        'OnePlus 8': { width: 72.9, height: 154.3 },
+        'OnePlus 8 Pro': { width: 72.9, height: 160.2 },
+        'OnePlus 8T': { width: 74.1, height: 160.7 },
+        'OnePlus 7': { width: 73.4, height: 157.7 },
+        'OnePlus 7 Pro': { width: 74.2, height: 162.0 },
+        'OnePlus 7T': { width: 73.4, height: 159.2 },
+        'OnePlus 7T Pro': { width: 74.2, height: 162.0 },
+        'OnePlus 6T': { width: 72.9, height: 156.1 },
+        'OnePlus 6': { width: 75.4, height: 155.6 },
+        'OnePlus Nord 2T': { width: 73.3, height: 159.1 },
+        'OnePlus Nord 2': { width: 73.3, height: 159.1 },
+      },
+      'Xiaomi': {
+        'Xiaomi 14': { width: 71.5, height: 152.8 },
+        'Xiaomi 14 Ultra': { width: 75.3, height: 164.0 },
+        'Xiaomi 14 Pro': { width: 73.2, height: 158.6 },
+        'Xiaomi 13': { width: 71.6, height: 152.8 },
+        'Xiaomi 13 Ultra': { width: 75.3, height: 164.0 },
+        'Xiaomi 13 Pro': { width: 75.3, height: 164.0 },
+        'Xiaomi 12': { width: 69.9, height: 151.8 },
+        'Xiaomi 12S Ultra': { width: 75.3, height: 164.0 },
+        'Xiaomi 12 Pro': { width: 75.3, height: 164.0 },
+        'Xiaomi 11': { width: 73.7, height: 165.1 },
+        'Xiaomi 11 Ultra': { width: 74.6, height: 162.8 },
+        'Xiaomi 11 Pro': { width: 74.6, height: 162.8 },
+        'Xiaomi 11 Lite': { width: 68.8, height: 150.2 },
+        'Xiaomi 10': { width: 74.4, height: 162.6 },
+        'Xiaomi 10 Pro': { width: 74.4, height: 162.6 },
+        'Xiaomi 10 Ultra': { width: 76.1, height: 162.6 },
+        'Redmi Note 13': { width: 77.9, height: 175.8 },
+        'Redmi Note 13 Pro': { width: 74.0, height: 164.0 },
+        'Redmi Note 13 Pro+': { width: 76.1, height: 164.0 },
+        'Redmi Note 12': { width: 77.9, height: 175.8 },
+        'Redmi Note 12 Pro': { width: 73.5, height: 160.7 },
+        'Redmi Note 12 Pro+': { width: 75.3, height: 164.0 },
+        'Redmi Note 11': { width: 73.9, height: 164.0 },
+        'Redmi Note 11 Pro': { width: 73.5, height: 159.6 },
+        'Redmi Note 11 Pro+': { width: 73.3, height: 159.1 },
+        'Redmi Note 10': { width: 76.4, height: 164.0 },
+        'Redmi Note 10 Pro': { width: 73.5, height: 161.9 },
+        'Poco X6': { width: 72.8, height: 159.6 },
+        'Poco X6 Pro': { width: 73.0, height: 161.9 },
+        'Poco X5': { width: 71.3, height: 163.3 },
+        'Poco X5 Pro': { width: 71.3, height: 163.3 },
+        'Poco X4': { width: 71.0, height: 163.0 },
+        'Poco F5': { width: 72.8, height: 160.8 },
+        'Poco F5 Pro': { width: 75.3, height: 164.0 },
+        'Poco F4': { width: 73.7, height: 163.3 },
+        'Poco M4': { width: 77.7, height: 169.5 },
+        'Poco M5': { width: 77.9, height: 175.8 },
+        'Poco C3': { width: 77.9, height: 175.3 },
+      },
+      'OPPO': {
+        'OPPO Find X7': { width: 73.0, height: 150.5 },
+        'OPPO Find X6 Pro': { width: 73.0, height: 150.5 },
+        'OPPO Find X6': { width: 73.0, height: 150.5 },
+        'OPPO Find X5 Pro': { width: 73.3, height: 149.9 },
+        'OPPO Find X5': { width: 73.3, height: 155.8 },
+        'OPPO Find X3 Pro': { width: 74.6, height: 163.8 },
+        'OPPO Find X3': { width: 71.5, height: 153.6 },
+        'OPPO Find X2 Pro': { width: 74.4, height: 164.3 },
+        'OPPO Find X2': { width: 71.8, height: 158.4 },
+        'OPPO Reno 11 Pro': { width: 71.6, height: 155.0 },
+        'OPPO Reno 11': { width: 71.6, height: 155.0 },
+        'OPPO Reno 11 Pro+': { width: 74.2, height: 164.0 },
+        'OPPO Reno 10 Pro': { width: 71.6, height: 155.0 },
+        'OPPO Reno 10': { width: 73.9, height: 165.8 },
+        'OPPO Reno 9 Pro': { width: 72.3, height: 160.3 },
+        'OPPO Reno 9': { width: 71.3, height: 156.3 },
+        'OPPO Reno 8 Pro': { width: 71.5, height: 156.8 },
+        'OPPO Reno 8': { width: 71.7, height: 157.9 },
+        'OPPO Reno 7 Pro': { width: 72.0, height: 157.9 },
+        'OPPO Reno 7': { width: 71.3, height: 156.3 },
+        'OPPO A79': { width: 74.7, height: 165.5 },
+        'OPPO A78': { width: 74.7, height: 165.5 },
+        'OPPO A77': { width: 74.7, height: 165.5 },
+        'OPPO A76': { width: 75.7, height: 164.0 },
+        'OPPO A75': { width: 75.1, height: 164.0 },
+      },
+      'Realme': {
+        'Realme 12': { width: 72.3, height: 154.5 },
+        'Realme 12 Pro': { width: 73.5, height: 160.8 },
+        'Realme 12 Pro+': { width: 74.8, height: 161.2 },
+        'Realme 11': { width: 72.3, height: 154.5 },
+        'Realme 11 Pro': { width: 73.7, height: 158.8 },
+        'Realme 11 Pro+': { width: 74.6, height: 159.0 },
+        'Realme 10': { width: 74.4, height: 162.5 },
+        'Realme 10 Pro': { width: 73.5, height: 160.8 },
+        'Realme 10 Pro+': { width: 73.5, height: 160.8 },
+        'Realme 9': { width: 73.3, height: 164.4 },
+        'Realme 9 Pro': { width: 73.3, height: 160.2 },
+        'Realme 9 Pro+': { width: 74.6, height: 161.2 },
+        'Realme 8': { width: 73.9, height: 164.9 },
+        'Realme 8 Pro': { width: 73.9, height: 164.9 },
+        'Realme 7': { width: 75.0, height: 164.9 },
+        'Realme 7 Pro': { width: 74.6, height: 160.9 },
+        'Realme GT': { width: 74.4, height: 160.8 },
+        'Realme GT Neo': { width: 72.5, height: 158.5 },
+        'Realme GT Master': { width: 73.3, height: 160.0 },
+        'Realme GT 2': { width: 73.3, height: 160.0 },
+        'Realme Narzo 50': { width: 76.4, height: 168.5 },
+        'Realme Narzo 60': { width: 74.2, height: 164.0 },
+        'Realme C55': { width: 76.7, height: 164.0 },
+      },
+      'Google': {
+        'Pixel 8': { width: 70.8, height: 150.5 },
+        'Pixel 8 Pro': { width: 73.0, height: 162.6 },
+        'Pixel 7': { width: 71.8, height: 152.0 },
+        'Pixel 7 Pro': { width: 75.9, height: 163.9 },
+        'Pixel 7a': { width: 72.9, height: 152.0 },
+        'Pixel 6': { width: 71.8, height: 152.2 },
+        'Pixel 6 Pro': { width: 75.9, height: 163.9 },
+        'Pixel 6a': { width: 71.8, height: 152.2 },
+        'Pixel 5': { width: 72.6, height: 155.0 },
+        'Pixel 5a': { width: 72.6, height: 154.9 },
+        'Pixel 4a': { width: 69.2, height: 144.0 },
+        'Pixel 4': { width: 68.4, height: 147.1 },
+        'Pixel 4 XL': { width: 75.7, height: 160.4 },
+        'Pixel 3a': { width: 67.3, height: 145.3 },
+        'Pixel 3': { width: 68.2, height: 145.4 },
+        'Pixel Fold': { width: 66.0, height: 148.0 },
+      },
+      'Vivo': {
+        'Vivo X100': { width: 75.2, height: 165.0 },
+        'Vivo X100 Pro': { width: 75.2, height: 165.0 },
+        'Vivo X90': { width: 75.2, height: 165.0 },
+        'Vivo X90 Pro': { width: 75.2, height: 165.0 },
+        'Vivo X80': { width: 75.2, height: 165.0 },
+        'Vivo X70': { width: 74.8, height: 161.3 },
+        'Vivo X60': { width: 74.2, height: 158.5 },
+        'Vivo Y100': { width: 74.7, height: 164.7 },
+        'Vivo Y80': { width: 77.5, height: 169.6 },
+        'Vivo Y70': { width: 77.9, height: 175.3 },
+        'Vivo Y51': { width: 76.4, height: 163.9 },
+        'Vivo S15': { width: 73.5, height: 159.4 },
+        'Vivo S1': { width: 71.2, height: 156.1 },
+      },
+      'Motorola': {
+        'Moto Edge 50 Pro': { width: 72.4, height: 160.0 },
+        'Moto Edge 50': { width: 71.6, height: 160.9 },
+        'Moto Edge 40': { width: 72.0, height: 160.0 },
+        'Moto Edge 40 Pro': { width: 72.4, height: 160.0 },
+        'Moto Edge 40 Neo': { width: 69.9, height: 152.0 },
+        'Moto Edge 30': { width: 71.8, height: 162.5 },
+        'Moto Edge 30 Pro': { width: 71.6, height: 161.5 },
+        'Moto Edge 20': { width: 71.6, height: 160.4 },
+        'Moto G84': { width: 74.9, height: 165.5 },
+        'Moto G54': { width: 74.9, height: 165.5 },
+        'Moto G53': { width: 74.9, height: 169.2 },
+        'Moto G23': { width: 75.0, height: 165.3 },
+        'Moto G13': { width: 75.8, height: 164.9 },
+      },
+      'Nothing': {
+        'Nothing Phone 2': { width: 72.0, height: 156.7 },
+        'Nothing Phone 2a': { width: 71.5, height: 153.9 },
+        'Nothing Phone 1': { width: 72.0, height: 156.7 },
+      },
+      'Honor': {
+        'Honor 200': { width: 74.1, height: 159.8 },
+        'Honor 200 Pro': { width: 74.1, height: 159.8 },
+        'Honor 100': { width: 74.7, height: 165.0 },
+        'Honor 100 Pro': { width: 74.7, height: 165.0 },
+        'Honor 90': { width: 72.7, height: 153.8 },
+        'Honor 90 Pro': { width: 73.2, height: 156.5 },
+        'Honor 80': { width: 72.3, height: 153.6 },
+        'Honor 80 Pro': { width: 73.0, height: 157.0 },
+        'Honor 70': { width: 73.7, height: 157.8 },
+        'Honor X9': { width: 76.4, height: 164.0 },
+      },
+      'Sony': {
+        'Xperia 1 VI': { width: 71.0, height: 165.0 },
+        'Xperia 1 V': { width: 71.0, height: 165.0 },
+        'Xperia 1 IV': { width: 71.0, height: 165.0 },
+        'Xperia 5 VI': { width: 68.0, height: 155.0 },
+        'Xperia 5 V': { width: 68.0, height: 155.0 },
+        'Xperia 5 IV': { width: 68.0, height: 157.0 },
+        'Xperia 10 VI': { width: 68.3, height: 159.0 },
+        'Xperia 10 V': { width: 68.3, height: 159.0 },
+        'Xperia 10 IV': { width: 67.6, height: 154.0 },
+        'Xperia Pro': { width: 72.0, height: 172.0 },
+      },
+      'HTC': {
+        'HTC U24 Pro': { width: 72.5, height: 162.0 },
+        'HTC Desire 24 Pro': { width: 72.5, height: 162.0 },
+        'HTC U23 Pro': { width: 72.5, height: 162.0 },
+      },
+    };
+
+    let currentImage = null;
+    let sheetsPerPage = 2;
+
+    function updateLabel(id, val) {
+      document.getElementById(id).textContent = val;
+    }
+
+    function loadBrands() {
+      const sel = document.getElementById('company');
+      Object.keys(phones).sort().forEach(b => {
+        const opt = document.createElement('option');
+        opt.value = b;
+        opt.textContent = b;
+        sel.appendChild(opt);
+      });
+    }
+
+    function updateModels() {
+      const brand = document.getElementById('company').value;
+      const modelSel = document.getElementById('model');
+      modelSel.innerHTML = '<option value="">Select Model...</option>';
+      if (!brand || !phones[brand]) return;
+      Object.keys(phones[brand]).sort().forEach(m => {
+        const opt = document.createElement('option');
+        opt.value = m;
+        opt.textContent = m;
+        modelSel.appendChild(opt);
+      });
+      updatePhoneInfo();
+    }
+
+    function updatePhoneInfo() {
+      const brand = document.getElementById('company').value;
+      const model = document.getElementById('model').value;
+      if (!brand || !model || !phones[brand] || !phones[brand][model]) {
+        document.getElementById('phoneInfo').textContent = '';
+        return;
+      }
+      const p = phones[brand][model];
+      document.getElementById('phoneInfo').textContent = `${p.width.toFixed(1)}mm × ${p.height.toFixed(1)}mm`;
+    }
+
+    function handleImageUpload() {
+      const file = document.getElementById('imageInput').files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          currentImage = img;
+          document.getElementById('imageStatus').style.display = 'block';
+          document.getElementById('adjustments').style.display = 'block';
+          document.getElementById('exportBtn').disabled = false;
+          document.getElementById('clearBtn').style.display = 'inline-block';
+          updatePreview();
+        };
+        img.src = e.target.result;
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function setSheetsPerPage(n) {
+      sheetsPerPage = n;
+      [1,2,3,4].forEach(i => {
+        document.getElementById('btn' + i).className = 'btn btn-secondary';
+      });
+      document.getElementById('btn' + n).className = 'btn btn-primary';
+      if (currentImage) updatePreview();
+    }
+
+    function getPositions(pw, ph, margin) {
+      const spacing = 3;
+      let positions = [];
+      
+      if (sheetsPerPage === 1) {
+        positions = [{x: margin, y: margin}];
+      } else if (sheetsPerPage === 2) {
+        positions = [{x: margin, y: margin}, {x: margin + pw + spacing, y: margin}];
+      } else if (sheetsPerPage === 3) {
+        positions = [{x: margin, y: margin}, {x: margin + pw + spacing, y: margin}, {x: margin, y: margin + ph + spacing}];
+      } else if (sheetsPerPage === 4) {
+        positions = [
+          {x: margin, y: margin},
+          {x: margin + pw + spacing, y: margin},
+          {x: margin, y: margin + ph + spacing},
+          {x: margin + pw + spacing, y: margin + ph + spacing}
+        ];
+      }
+      return positions;
+    }
+
+    function updatePreview() {
+      if (!currentImage) return;
+      const brand = document.getElementById('company').value;
+      const model = document.getElementById('model').value;
+      if (!brand || !model || !phones[brand] || !phones[brand][model]) return;
+      
+      const phone = phones[brand][model];
+      const offsetX = parseInt(document.getElementById('offsetX').value);
+      const offsetY = parseInt(document.getElementById('offsetY').value);
+      const scale = parseFloat(document.getElementById('scale').value);
+
+      const container = document.getElementById('canvasContainer');
+      container.innerHTML = '';
+
+      const pageW = 297, pageH = 210, margin = 2, dpi = 96, mmPx = dpi / 25.4;
+      const pw = phone.width * mmPx, ph = phone.height * mmPx;
+      const positions = getPositions(pw, ph, margin * mmPx);
+
+      const canvas = document.createElement('canvas');
+      canvas.width = pageW * mmPx;
+      canvas.height = pageH * mmPx;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      positions.forEach(p => {
+        ctx.strokeStyle = '#000';
+        ctx.lineWidth = 1;
+        ctx.fillStyle = '#f5f5f5';
+        ctx.fillRect(p.x, p.y, pw, ph);
+        ctx.strokeRect(p.x, p.y, pw, ph);
+
+        if (currentImage) {
+          const iw = pw * scale, ih = ph * scale;
+          const ix = p.x + (pw - iw) / 2 + offsetX;
+          const iy = p.y + (ph - ih) / 2 + offsetY;
+
+          ctx.save();
+          ctx.beginPath();
+          ctx.rect(p.x, p.y, pw, ph);
+          ctx.clip();
+          ctx.drawImage(currentImage, ix, iy, iw, ih);
+          ctx.restore();
+        }
+
+        const mk = 6;
+        ctx.strokeStyle = '#666';
+        ctx.lineWidth = 0.8;
+        ctx.beginPath();
+        ctx.moveTo(p.x, p.y + mk);
+        ctx.lineTo(p.x, p.y);
+        ctx.lineTo(p.x + mk, p.y);
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.moveTo(p.x + pw - mk, p.y);
+        ctx.lineTo(p.x + pw, p.y);
+        ctx.lineTo(p.x + pw, p.y + mk);
+        ctx.stroke();
+      });
+
+      container.appendChild(canvas);
+    }
+
+    function generatePDF() {
+      if (!currentImage) return;
+      const brand = document.getElementById('company').value;
+      const model = document.getElementById('model').value;
+      if (!brand || !model || !phones[brand] || !phones[brand][model]) return;
+
+      const phone = phones[brand][model];
+      const offsetX = parseInt(document.getElementById('offsetX').value);
+      const offsetY = parseInt(document.getElementById('offsetY').value);
+      const scale = parseFloat(document.getElementById('scale').value);
+
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF('landscape', 'mm', 'a4');
+      const pw = phone.width;
+      const ph = phone.height;
+      const margin = 2;
+      const dpi = 96;
+      const mmPx = dpi / 25.4;
+      
+      const positions = getPositions(pw, ph, margin);
+
+      positions.forEach(p => {
+        // Render image to canvas first
+        const imgCanvas = document.createElement('canvas');
+        imgCanvas.width = Math.ceil(pw * mmPx);
+        imgCanvas.height = Math.ceil(ph * mmPx);
+        const imgCtx = imgCanvas.getContext('2d');
+        imgCtx.fillStyle = '#f5f5f5';
+        imgCtx.fillRect(0, 0, imgCanvas.width, imgCanvas.height);
+
+        if (currentImage) {
+          const iw = pw * scale;
+          const ih = ph * scale;
+          const ix = (pw - iw) / 2 + offsetX / mmPx;
+          const iy = (ph - ih) / 2 + offsetY / mmPx;
+
+          imgCtx.save();
+          imgCtx.beginPath();
+          imgCtx.rect(0, 0, pw * mmPx, ph * mmPx);
+          imgCtx.clip();
+          imgCtx.drawImage(currentImage, ix, iy, iw, ih);
+          imgCtx.restore();
+        }
+
+        const imgData = imgCanvas.toDataURL('image/jpeg', 0.95);
+        doc.addImage(imgData, 'JPEG', p.x, p.y, pw, ph);
+        
+        // Draw outline
+        doc.setDrawColor(0);
+        doc.setLineWidth(0.3);
+        doc.rect(p.x, p.y, pw, ph);
+      });
+
+      doc.save('phone-cover.pdf');
+    }
+
+    function clearAll() {
+      document.getElementById('imageInput').value = '';
+      currentImage = null;
+      document.getElementById('imageStatus').style.display = 'none';
+      document.getElementById('adjustments').style.display = 'none';
+      document.getElementById('exportBtn').disabled = true;
+      document.getElementById('clearBtn').style.display = 'none';
+      document.getElementById('offsetX').value = 0;
+      document.getElementById('offsetY').value = 0;
+      document.getElementById('scale').value = 1;
+      document.getElementById('xValue').textContent = '0';
+      document.getElementById('yValue').textContent = '0';
+      document.getElementById('scaleValue').textContent = '1.00';
+      document.getElementById('canvasContainer').innerHTML = '<p style="color: #94a3b8; padding: 30px;">Upload image to preview</p>';
+    }
+
+    window.addEventListener('load', () => {
+      loadBrands();
+      setSheetsPerPage(2);
+    });
+  </script>
+</body>
+</html>
